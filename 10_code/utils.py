@@ -3,6 +3,7 @@ import sys
 import time
 import math
 import numpy as np
+from PIL import Image
 
 import torch
 import torch.nn as nn
@@ -12,6 +13,8 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 
 from scipy.ndimage.interpolation import rotate
+
+#######################################################
 
 def _convert(im):
   return ((im + 1) * 127.5).astype(np.uint8)
@@ -107,9 +110,27 @@ def test_random_transform(min_scale=0.5, max_scale=1.0,  max_rotation=22.5):
   
   show(xformed_img)
 
-for i in range(2):
-  print("Test image with random transform: %s" % (i+1))
-  test_random_transform(min_scale=0.25, max_scale=2.0, max_rotation=22.5)
+def _circle_mask(shape, sharpness = 40):
+  """Return a circular mask of a given shape"""
+  assert shape[0] == shape[1], "circle_mask received a bad shape: " + shape
+
+  diameter = shape[0]  
+  x = np.linspace(-1, 1, diameter)
+  y = np.linspace(-1, 1, diameter)
+  xx, yy = np.meshgrid(x, y, sparse=True)
+  z = (xx**2 + yy**2) ** sharpness
+
+  mask = 1 - np.clip(z, -1, 1)
+  mask = np.expand_dims(mask, axis=2)
+  mask = np.broadcast_to(mask, shape).astype(np.float32)
+  return mask
+
+def _gen_target_ys():
+  label = TARGET_LABEL
+  y_one_hot = np.zeros(1000)
+  y_one_hot[label] = 1.0
+  y_one_hot = np.tile(y_one_hot, (BATCH_SIZE, 1))
+  return y_one_hot
 
 ##############################################################################################
 
