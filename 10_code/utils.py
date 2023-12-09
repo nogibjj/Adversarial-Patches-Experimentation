@@ -202,6 +202,7 @@ def circle_transform(patch, data_shape, patch_shape, image_size):
         # random rotation
         rot = np.random.choice(360)
         for j in range(patch[i].shape[0]):
+            print(i, j)
             patch[i][j] = rotate(patch[i][j], angle=rot, reshape=False)
 
         # random location
@@ -350,7 +351,6 @@ def train(
     for batch_idx, (data, labels) in enumerate(train_loader):
         data, labels = data.to(device), labels.to(device)
         prediction = netClassifier(data)
-
         # only computer adversarial examples on examples that are originally classified correctly
         if prediction.data.max(1)[1][0] != labels.data[0]:
             continue
@@ -363,14 +363,18 @@ def train(
             patch, mask, patch_shape = circle_transform(
                 patch, data_shape, patch_shape, image_size
             )
+            print("2")
         elif patch_type == "square":
             patch, mask = square_transform(patch, data_shape, patch_shape, image_size)
+            print("uh oh")
         patch, mask = torch.FloatTensor(patch), torch.FloatTensor(mask)
         if device:
             patch, mask = patch.cuda(), mask.cuda()
-        patch, mask = Variable(patch), Variable(mask)
+
+        # patch, mask = Variable(patch), Variable(mask) - NOT SURE IF THIS SHOULD BE UNCOMMENTED
 
         adv_x, mask, patch = attack(data, patch, mask, netClassifier, target)
+        print("3")
 
         adv_label = netClassifier(adv_x).data.max(1)[1][0]
         ori_label = labels.data[0]
@@ -386,6 +390,7 @@ def train(
                 new_patch[i][j] = submatrix(patch[i][j])
 
         patch = new_patch
+        print("4")
 
         # log to file
         print("Epoch {}: Train Patch Success: {:.3f}".format(epoch, success / total))
@@ -410,11 +415,7 @@ def test(
     success = 0
     total = 0
     for batch_idx, (data, labels) in enumerate(test_loader):
-        if device:
-            data = data.cuda()
-            labels = labels.cuda()
-        data, labels = Variable(data), Variable(labels)
-
+        data, labels = data.to(device), labels.to(device)
         prediction = netClassifier(data)
 
         # only computer adversarial examples on examples that are originally classified correctly
@@ -432,9 +433,10 @@ def test(
         elif patch_type == "square":
             patch, mask = square_transform(patch, data_shape, patch_shape, image_size)
         patch, mask = torch.FloatTensor(patch), torch.FloatTensor(mask)
-        if device:
+        if device == "cuda":
             patch, mask = patch.cuda(), mask.cuda()
-        patch, mask = Variable(patch), Variable(mask)
+
+        # patch, mask = Variable(patch), Variable(mask) - NOT SURE IF THIS SHOULD BE UNCOMMENTED
 
         adv_x = torch.mul((1 - mask), data) + torch.mul(mask, patch)
         adv_x = torch.clamp(adv_x, min_out, max_out)
