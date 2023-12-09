@@ -346,12 +346,9 @@ def train(
     success = 0
     total = 0
     recover_time = 0
-    for batch_idx, (data, labels) in enumerate(train_loader):
-        if device == "cuda":
-            data = data.cuda()
-            labels = labels.cuda()
-        data, labels = Variable(data), Variable(labels)
 
+    for batch_idx, (data, labels) in enumerate(train_loader):
+        data, labels = data.to(device), labels.to(device)
         prediction = netClassifier(data)
 
         # only computer adversarial examples on examples that are originally classified correctly
@@ -459,16 +456,3 @@ def test(
 
         # log to file
         print("Test Success: {:.3f}".format(success / total))
-
-
-if __name__ == "__main__":
-    if patch_type == "circle":
-        patch, patch_shape = init_patch_circle(image_size, patch_size)
-    elif patch_type == "square":
-        patch, patch_shape = init_patch_square(image_size, patch_size)
-    else:
-        sys.exit("Please choose a square or circle patch")
-
-    for epoch in range(1, opt.epochs + 1):
-        patch = train(epoch, patch, patch_shape)
-        test(epoch, patch, patch_shape)
