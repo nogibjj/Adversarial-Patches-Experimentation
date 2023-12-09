@@ -388,7 +388,7 @@ def train(
         patch = new_patch
 
         # log to file
-        print("Train Patch Success: {:.3f}".format(success / total))
+        print("Epoch {}: Train Patch Success: {:.3f}".format(epoch, success / total))
 
     return patch
 
@@ -455,4 +455,4 @@ def test(
         patch = new_patch
 
         # log to file
-        print("Test Success: {:.3f}".format(success / total))
+        print("Epoch {}: Test Patch Success: {:.3f}".format(epoch, success / total))
