@@ -191,7 +191,7 @@ def init_patch_circle(image_size, patch_size):
     return patch, patch.shape
 
 
-def circle_transform(patch, data_shape, patch_shape, image_size):
+def circle_transform(patch, data_shape, patch_shape, image_size, device="cuda"):
     # get dummy image
     x = np.zeros(data_shape)
 
@@ -201,9 +201,8 @@ def circle_transform(patch, data_shape, patch_shape, image_size):
     for i in range(x.shape[0]):
         # random rotation
         rot = np.random.choice(360)
-        for j in range(patch[i].shape[0]):
-            print(i, j)
-            patch[i][j] = rotate(patch[i][j], angle=rot, reshape=False)
+        for j in range(patch[0][i].shape[0]):
+            patch[0][i] = rotate(patch[0][i], angle=rot, reshape=False)
 
         # random location
         random_x = np.random.choice(image_size)
@@ -216,18 +215,22 @@ def circle_transform(patch, data_shape, patch_shape, image_size):
                 random_y = np.random.choice(image_size)
 
         # apply patch to dummy image
-        x[i][0][
+        x[i][
             random_x : random_x + patch_shape[-1], random_y : random_y + patch_shape[-1]
-        ] = patch[i][0]
-        x[i][1][
-            random_x : random_x + patch_shape[-1], random_y : random_y + patch_shape[-1]
-        ] = patch[i][1]
-        x[i][2][
-            random_x : random_x + patch_shape[-1], random_y : random_y + patch_shape[-1]
-        ] = patch[i][2]
+        ] = patch[0][i]
+        # x[i][1][
+        #    random_x : random_x + patch_shape[-1], random_y : random_y + patch_shape[-1]
+        # ] = patch[0][i]
+        # x[i][2][
+        #    random_x : random_x + patch_shape[-1], random_y : random_y + patch_shape[-1]
+        # ] = patch[0][2]
 
     mask = np.copy(x)
     mask[mask != 0] = 1.0
+
+    # x = torch.tensor(x).to(device)
+    # mask = torch.tensor(mask).to(device)
+    # patch = torch.tensor(patch).to(device)
 
     return x, mask, patch.shape
 
@@ -295,7 +298,13 @@ def attack(
     netClassifier.eval()
 
     x_out = F.softmax(netClassifier(x))
-    target_prob = x_out.data[0][target]
+    target_prob = x_out.data[0][target]  # QUESTION: why are we only taking one?
+
+    # extend mask to match dimensions of x
+    mask = mask.unsqueeze(0).expand(256, -1, -1, -1)
+
+    # extend patch to match dimensions of x
+    patch = patch.unsqueeze(0).expand(256, -1, -1, -1)
 
     adv_x = torch.mul((1 - mask), x) + torch.mul(mask, patch)
 
@@ -303,7 +312,7 @@ def attack(
 
     while conf_target > target_prob:
         count += 1
-        adv_x = Variable(adv_x.data, requires_grad=True)
+        adv_x = adv_x.detach().requires_grad_(True)  # CHANGED
         adv_out = F.log_softmax(netClassifier(adv_x))
 
         adv_out_probs, adv_out_labels = adv_out.max(1)
@@ -312,6 +321,7 @@ def attack(
         Loss.backward()
 
         adv_grad = adv_x.grad.clone()
+        patch = patch.clone()
 
         adv_x.grad.data.zero_()
 
@@ -358,23 +368,19 @@ def train(
         total += 1
 
         # transform path
-        data_shape = data.data.cpu().numpy().shape
+        data_shape = data[0].data.cpu().numpy().shape
         if patch_type == "circle":
             patch, mask, patch_shape = circle_transform(
                 patch, data_shape, patch_shape, image_size
             )
-            print("2")
         elif patch_type == "square":
             patch, mask = square_transform(patch, data_shape, patch_shape, image_size)
-            print("uh oh")
         patch, mask = torch.FloatTensor(patch), torch.FloatTensor(mask)
-        if device:
-            patch, mask = patch.cuda(), mask.cuda()
+        patch, mask, data = patch.to(device), mask.to(device), data.to(device)
 
         # patch, mask = Variable(patch), Variable(mask) - NOT SURE IF THIS SHOULD BE UNCOMMENTED
 
         adv_x, mask, patch = attack(data, patch, mask, netClassifier, target)
-        print("3")
 
         adv_label = netClassifier(adv_x).data.max(1)[1][0]
         ori_label = labels.data[0]
@@ -390,10 +396,9 @@ def train(
                 new_patch[i][j] = submatrix(patch[i][j])
 
         patch = new_patch
-        print("4")
 
         # log to file
-        print("Epoch {}: Train Patch Success: {:.3f}".format(epoch, success / total))
+    print("Epoch {}: Train Patch Success: {:.3f}".format(epoch, success / total))
 
     return patch
 
