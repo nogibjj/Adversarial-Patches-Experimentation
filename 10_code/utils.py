@@ -301,10 +301,10 @@ def attack(
     target_prob = x_out.data[0][target]  # QUESTION: why are we only taking one?
 
     # extend mask to match dimensions of x
-    mask = mask.unsqueeze(0).expand(256, -1, -1, -1)
+    mask = mask.unsqueeze(0).expand(x.shape[0], -1, -1, -1)
 
     # extend patch to match dimensions of x
-    patch = patch.unsqueeze(0).expand(256, -1, -1, -1)
+    patch = patch.unsqueeze(0).expand(x.shape[0], -1, -1, -1)
 
     adv_x = torch.mul((1 - mask), x) + torch.mul(mask, patch)
 
