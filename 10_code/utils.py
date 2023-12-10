@@ -214,7 +214,7 @@ def circle_transform(patch, data_shape, patch_shape, image_size, device="cuda"):
             while random_y + m_size > x.shape[-1]:
                 random_y = np.random.choice(image_size)
 
-        # apply patch to dummy image
+        # apply patch to dummy image - question: am I applying this correctly?
         x[i][
             random_x : random_x + patch_shape[-1], random_y : random_y + patch_shape[-1]
         ] = patch[0][i]
@@ -369,6 +369,7 @@ def train(
 
         # transform path
         data_shape = data[0].data.cpu().numpy().shape
+
         if patch_type == "circle":
             patch, mask, patch_shape = circle_transform(
                 patch, data_shape, patch_shape, image_size
@@ -430,7 +431,8 @@ def test(
         total += 1
 
         # transform path
-        data_shape = data.data.cpu().numpy().shape
+        data_shape = data[0].data.cpu().numpy().shape
+
         if patch_type == "circle":
             patch, mask, patch_shape = circle_transform(
                 patch, data_shape, patch_shape, image_size
@@ -438,10 +440,15 @@ def test(
         elif patch_type == "square":
             patch, mask = square_transform(patch, data_shape, patch_shape, image_size)
         patch, mask = torch.FloatTensor(patch), torch.FloatTensor(mask)
-        if device == "cuda":
-            patch, mask = patch.cuda(), mask.cuda()
+        patch, mask, data = patch.to(device), mask.to(device), data.to(device)
 
         # patch, mask = Variable(patch), Variable(mask) - NOT SURE IF THIS SHOULD BE UNCOMMENTED
+
+        # extend mask to match dimensions of x
+        mask = mask.unsqueeze(0).expand(data.shape[0], -1, -1, -1)
+
+        # extend patch to match dimensions of x
+        patch = patch.unsqueeze(0).expand(data.shape[0], -1, -1, -1)
 
         adv_x = torch.mul((1 - mask), data) + torch.mul(mask, patch)
         adv_x = torch.clamp(adv_x, min_out, max_out)
@@ -462,4 +469,4 @@ def test(
         patch = new_patch
 
         # log to file
-        print("Epoch {}: Test Patch Success: {:.3f}".format(epoch, success / total))
+    print("Epoch {}: Test Patch Success: {:.3f}".format(epoch, success / total))
