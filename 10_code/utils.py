@@ -300,10 +300,10 @@ def attack(
     mask,
     netClassifier,
     target,
-    conf_target=0.8,
+    conf_target=0.9,
     min_out=0,  # not sure about this one
     max_out=1,  # not sure about this one
-    max_count=100,
+    max_count=500,
 ):
     netClassifier.eval()
     # x.shape  = (256, 3, 32, 32)
@@ -328,7 +328,7 @@ def attack(
 
         adv_out_probs, adv_out_labels = adv_out.max(1)
 
-        Loss = -adv_out[:, target].mean()
+        Loss = -adv_out[:, target].mean() # modify here
         Loss.backward()
 
         adv_grad = adv_x.grad.clone()
@@ -406,7 +406,7 @@ def train(
 
         for i in range(new_patch.shape[0]):
             for j in range(new_patch.shape[1]):
-                new_patch[i][j] = submatrix(patch[0][j])
+                new_patch[i][j] = submatrix(patch[0][j]) # modify here given the last batch of patch will not have 256 samples
 
         patch = new_patch
 
