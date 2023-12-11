@@ -301,16 +301,15 @@ def attack(
     mask,
     netClassifier,
     target,
-    conf_target=0.9,
-    min_out=-1,  # not sure about this one
+    conf_target=0.5,
+    min_out=0,  # not sure about this one
     max_out=1,  # not sure about this one
-    max_count=1000,
+    max_count=500,
 ):
     netClassifier.eval()
     # x.shape  = (256, 3, 32, 32)
     x_out = F.softmax(netClassifier(x))
     target_prob = x_out.data[0][target]# QUESTION: why are we only taking one? # i think i get why, but the reason is dumb i would say
-    print(target_prob) # for debugging
 
     # # extend mask to match dimensions of x
     
@@ -423,10 +422,10 @@ def test(
     patch_shape,
     netClassifier,
     test_loader,
-    image_size,
-    min_out,
-    max_out,
     target,
+    image_size,
+    min_out = 0,
+    max_out = 1,
     device="cuda",
     patch_type="square",
 ):
@@ -444,7 +443,7 @@ def test(
         total += 1
 
         # transform path
-        data_shape = data[0].data.cpu().numpy().shape
+        data_shape = data.data.cpu().numpy().shape
 
         if patch_type == "circle":
             patch, mask, patch_shape = circle_transform(
@@ -457,11 +456,11 @@ def test(
 
         # patch, mask = Variable(patch), Variable(mask) - NOT SURE IF THIS SHOULD BE UNCOMMENTED
 
-        # extend mask to match dimensions of x
-        mask = mask.unsqueeze(0).expand(data.shape[0], -1, -1, -1)
+        # # extend mask to match dimensions of x
+        # mask = mask.unsqueeze(0).expand(data.shape[0], -1, -1, -1)
 
-        # extend patch to match dimensions of x
-        patch = patch.unsqueeze(0).expand(data.shape[0], -1, -1, -1)
+        # # extend patch to match dimensions of x
+        # patch = patch.unsqueeze(0).expand(data.shape[0], -1, -1, -1)
 
         adv_x = torch.mul((1 - mask), data) + torch.mul(mask, patch)
         adv_x = torch.clamp(adv_x, min_out, max_out)
