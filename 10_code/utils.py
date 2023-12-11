@@ -172,27 +172,26 @@ class ToRange255(object):
         return tensor
 
 
-def init_patch_circle(image_size, patch_size):
+
+def init_patch_circle(image_size, patch_size, batch_size):
     """Initialize a random circle patch."""
-    image_size = image_size**2
+    image_size = image_size ** 2
     # Calculate the number of pixels in the circular patch
     noise_size = int(image_size * patch_size)
     # Calculate the radius of the circular patch
     radius = int(math.sqrt(noise_size / math.pi))
-    # Initialize an empty patch with shape (1, 3, 2*radius, 2*radius)
-    patch = np.zeros((1, 3, radius * 2, radius * 2))
+    # Initialize an empty patch with shape (batch_size, 3, 2*radius, 2*radius)
+    patch = np.zeros((batch_size, 3, radius * 2, radius * 2))
     # Loop through each color channel (R, G, B)
     for i in range(3):
         a = np.zeros((radius * 2, radius * 2))
         cx, cy = radius, radius  # The center of circle
         y, x = np.ogrid[-radius:radius, -radius:radius]
-        index = x**2 + y**2 <= radius**2
-        a[cy - radius : cy + radius, cx - radius : cx + radius][
-            index
-        ] = np.random.rand()
+        index = x ** 2 + y ** 2 <= radius ** 2
+        a[cy - radius : cy + radius, cx - radius : cx + radius][index] = np.random.rand()
         idx = np.flatnonzero((a == 0).all((1)))
         a = np.delete(a, idx, axis=0)
-        patch[0][i] = np.delete(a, idx, axis=1)
+        patch[:, i] = np.delete(a, idx, axis=1)
     return patch, patch.shape
 
 
@@ -207,7 +206,7 @@ def circle_transform(patch, data_shape, patch_shape, image_size, device="cuda"):
         # random rotation
         rot = np.random.choice(360)
         for j in range(patch[0].shape[0]):
-            patch[0][j] = rotate(patch[0][j], angle=rot, reshape=False)
+            patch[i][j] = rotate(patch[i][j], angle=rot, reshape=False)
 
         # random location
         random_x = np.random.choice(image_size)
@@ -231,9 +230,9 @@ def circle_transform(patch, data_shape, patch_shape, image_size, device="cuda"):
         # ] = patch[0][2]
 
         # apply patch to dummy image  - modification by yayun
-        x[i][0][random_x:random_x+patch_shape[-1], random_y:random_y+patch_shape[-1]] = patch[0][0]
-        x[i][1][random_x:random_x+patch_shape[-1], random_y:random_y+patch_shape[-1]] = patch[0][1]
-        x[i][2][random_x:random_x+patch_shape[-1], random_y:random_y+patch_shape[-1]] = patch[0][2]
+        x[i][0][random_x:random_x+patch_shape[-1], random_y:random_y+patch_shape[-1]] = patch[i][0]
+        x[i][1][random_x:random_x+patch_shape[-1], random_y:random_y+patch_shape[-1]] = patch[i][1]
+        x[i][2][random_x:random_x+patch_shape[-1], random_y:random_y+patch_shape[-1]] = patch[i][2]
 
 
     mask = np.copy(x)
@@ -301,7 +300,7 @@ def attack(
     mask,
     netClassifier,
     target,
-    conf_target=0.5,
+    conf_target=0.7,
     min_out=0,  # not sure about this one
     max_out=1,  # not sure about this one
     max_count=500,
