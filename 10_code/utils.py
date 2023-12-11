@@ -242,7 +242,7 @@ def circle_transform(patch, data_shape, patch_shape, image_size, device="cuda"):
     # mask = torch.tensor(mask).to(device)
     # patch = torch.tensor(patch).to(device)
 
-    return x_w_patch, mask, patch.shape
+    return x_w_patch, mask
 
 
 def init_patch_square(image_size, patch_size):
@@ -300,10 +300,10 @@ def attack(
     mask,
     netClassifier,
     target,
-    conf_target=0.7,
+    conf_target=0.8,
     min_out=0,  # not sure about this one
     max_out=1,  # not sure about this one
-    max_count=500,
+    max_count=100,
 ):
     netClassifier.eval()
     # x.shape  = (256, 3, 32, 32)
@@ -317,7 +317,7 @@ def attack(
     # extend patch to match dimensions of x
     # patch = patch.unsqueeze(0).expand(x.shape[0], -1, -1, -1)
 
-    adv_x = torch.mul((1 - mask), x) + torch.mul(mask, patch)
+    adv_x = torch.mul((1 - mask), x) + torch.mul(mask, patch) 
 
     count = 0
 
@@ -328,7 +328,7 @@ def attack(
 
         adv_out_probs, adv_out_labels = adv_out.max(1)
 
-        Loss = -adv_out[0][target]
+        Loss = -adv_out[:, target].mean()
         Loss.backward()
 
         adv_grad = adv_x.grad.clone()
@@ -382,7 +382,7 @@ def train(
         data_shape = data.data.cpu().numpy().shape # keep it as original shape by yayun
 
         if patch_type == "circle":
-            patch, mask, patch_shape = circle_transform(
+            patch, mask = circle_transform(
                 patch, data_shape, patch_shape, image_size
             )
         elif patch_type == "square":
@@ -403,9 +403,10 @@ def train(
         masked_patch = torch.mul(mask, patch)
         patch = masked_patch.data.cpu().numpy()
         new_patch = np.zeros(patch_shape)
+
         for i in range(new_patch.shape[0]):
             for j in range(new_patch.shape[1]):
-                new_patch[i][j] = submatrix(patch[i][j])
+                new_patch[i][j] = submatrix(patch[0][j])
 
         patch = new_patch
 
@@ -445,7 +446,7 @@ def test(
         data_shape = data.data.cpu().numpy().shape
 
         if patch_type == "circle":
-            patch, mask, patch_shape = circle_transform(
+            patch, mask = circle_transform(
                 patch, data_shape, patch_shape, image_size
             )
         elif patch_type == "square":
@@ -473,9 +474,11 @@ def test(
         masked_patch = torch.mul(mask, patch)
         patch = masked_patch.data.cpu().numpy()
         new_patch = np.zeros(patch_shape)
+
+
         for i in range(new_patch.shape[0]):
             for j in range(new_patch.shape[1]):
-                new_patch[i][j] = submatrix(patch[i][j])
+                new_patch[i][j] = submatrix(patch[0][j])
 
         patch = new_patch
 
