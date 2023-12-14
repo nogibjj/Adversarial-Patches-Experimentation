@@ -330,7 +330,6 @@ def attack(
 
         Loss = -adv_out[:, target].mean() # modify here
         Loss.backward()
-
         adv_grad = adv_x.grad.clone()
         patch = patch.clone()
 
@@ -472,7 +471,7 @@ def test(
             success += 1
 
         masked_patch = torch.mul(mask, patch)
-        patch = masked_patch.data.cpu().numpy()
+        patch_copy = masked_patch.data.cpu().numpy()
         new_patch = np.zeros(patch_shape)
 
 
@@ -480,7 +479,7 @@ def test(
             for j in range(new_patch.shape[1]):
                 new_patch[i][j] = submatrix(patch[0][j])
 
-        patch = new_patch
+        # patch = new_patch
 
         # log to file
     print("Epoch {}: Test Patch Success: {:.3f}".format(epoch, success / total))
