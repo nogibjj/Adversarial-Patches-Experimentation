@@ -172,22 +172,26 @@ class ToRange255(object):
         return tensor
 
 
-def init_patch_circle(image_size, patch_size):
-    image_size = image_size**2
+
+def init_patch_circle(image_size, patch_size, batch_size):
+    """Initialize a random circle patch."""
+    image_size = image_size ** 2
+    # Calculate the number of pixels in the circular patch
     noise_size = int(image_size * patch_size)
+    # Calculate the radius of the circular patch
     radius = int(math.sqrt(noise_size / math.pi))
-    patch = np.zeros((1, 3, radius * 2, radius * 2))
+    # Initialize an empty patch with shape (batch_size, 3, 2*radius, 2*radius)
+    patch = np.zeros((batch_size, 3, radius * 2, radius * 2))
+    # Loop through each color channel (R, G, B)
     for i in range(3):
         a = np.zeros((radius * 2, radius * 2))
         cx, cy = radius, radius  # The center of circle
         y, x = np.ogrid[-radius:radius, -radius:radius]
-        index = x**2 + y**2 <= radius**2
-        a[cy - radius : cy + radius, cx - radius : cx + radius][
-            index
-        ] = np.random.rand()
+        index = x ** 2 + y ** 2 <= radius ** 2
+        a[cy - radius : cy + radius, cx - radius : cx + radius][index] = np.random.rand()
         idx = np.flatnonzero((a == 0).all((1)))
         a = np.delete(a, idx, axis=0)
-        patch[0][i] = np.delete(a, idx, axis=1)
+        patch[:, i] = np.delete(a, idx, axis=1)
     return patch, patch.shape
 
 
@@ -198,11 +202,11 @@ def circle_transform(patch, data_shape, patch_shape, image_size, device="cuda"):
     # get shape
     m_size = patch_shape[-1]
 
-    for i in range(x.shape[0]):
+    for i in range(x.shape[0]): # number of samples in the batch i.e. Batch Size
         # random rotation
         rot = np.random.choice(360)
-        for j in range(patch[0][i].shape[0]):
-            patch[0][i] = rotate(patch[0][i], angle=rot, reshape=False)
+        for j in range(patch[0].shape[0]):
+            patch[i][j] = rotate(patch[i][j], angle=rot, reshape=False)
 
         # random location
         random_x = np.random.choice(image_size)
@@ -215,9 +219,9 @@ def circle_transform(patch, data_shape, patch_shape, image_size, device="cuda"):
                 random_y = np.random.choice(image_size)
 
         # apply patch to dummy image - question: am I applying this correctly?
-        x[i][
-            random_x : random_x + patch_shape[-1], random_y : random_y + patch_shape[-1]
-        ] = patch[0][i]
+        # x[i][
+        #     random_x : random_x + patch_shape[-1], random_y : random_y + patch_shape[-1]
+        # ] = patch[0][i] ## Elisa's code 
         # x[i][1][
         #    random_x : random_x + patch_shape[-1], random_y : random_y + patch_shape[-1]
         # ] = patch[0][i]
@@ -225,14 +229,20 @@ def circle_transform(patch, data_shape, patch_shape, image_size, device="cuda"):
         #    random_x : random_x + patch_shape[-1], random_y : random_y + patch_shape[-1]
         # ] = patch[0][2]
 
+        # apply patch to dummy image  - modification by yayun
+        x[i][0][random_x:random_x+patch_shape[-1], random_y:random_y+patch_shape[-1]] = patch[i][0]
+        x[i][1][random_x:random_x+patch_shape[-1], random_y:random_y+patch_shape[-1]] = patch[i][1]
+        x[i][2][random_x:random_x+patch_shape[-1], random_y:random_y+patch_shape[-1]] = patch[i][2]
+
+
     mask = np.copy(x)
     mask[mask != 0] = 1.0
-
+    x_w_patch = x
     # x = torch.tensor(x).to(device)
     # mask = torch.tensor(mask).to(device)
     # patch = torch.tensor(patch).to(device)
 
-    return x, mask, patch.shape
+    return x_w_patch, mask
 
 
 def init_patch_square(image_size, patch_size):
@@ -291,22 +301,23 @@ def attack(
     netClassifier,
     target,
     conf_target=0.9,
-    min_out=-1,  # not sure about this one
+    min_out=0,  # not sure about this one
     max_out=1,  # not sure about this one
-    max_count=1000,
+    max_count=500,
 ):
     netClassifier.eval()
-
+    # x.shape  = (256, 3, 32, 32)
     x_out = F.softmax(netClassifier(x))
-    target_prob = x_out.data[0][target]  # QUESTION: why are we only taking one?
+    target_prob = x_out.data[0][target]# QUESTION: why are we only taking one? # i think i get why, but the reason is dumb i would say
 
-    # extend mask to match dimensions of x
-    mask = mask.unsqueeze(0).expand(x.shape[0], -1, -1, -1)
+    # # extend mask to match dimensions of x
+    
+    # mask = mask.unsqueeze(0).expand(x.shape[0], -1, -1, -1)
 
     # extend patch to match dimensions of x
-    patch = patch.unsqueeze(0).expand(x.shape[0], -1, -1, -1)
+    # patch = patch.unsqueeze(0).expand(x.shape[0], -1, -1, -1)
 
-    adv_x = torch.mul((1 - mask), x) + torch.mul(mask, patch)
+    adv_x = torch.mul((1 - mask), x) + torch.mul(mask, patch) 
 
     count = 0
 
@@ -317,7 +328,7 @@ def attack(
 
         adv_out_probs, adv_out_labels = adv_out.max(1)
 
-        Loss = -adv_out[0][target]
+        Loss = -adv_out[:, target].mean() # modify here
         Loss.backward()
         adv_grad = adv_x.grad.clone()
         patch = patch.clone()
@@ -367,10 +378,10 @@ def train(
         total += 1
 
         # transform path
-        data_shape = data[0].data.cpu().numpy().shape
+        data_shape = data.data.cpu().numpy().shape # keep it as original shape by yayun
 
         if patch_type == "circle":
-            patch, mask, patch_shape = circle_transform(
+            patch, mask = circle_transform(
                 patch, data_shape, patch_shape, image_size
             )
         elif patch_type == "square":
@@ -391,9 +402,10 @@ def train(
         masked_patch = torch.mul(mask, patch)
         patch = masked_patch.data.cpu().numpy()
         new_patch = np.zeros(patch_shape)
+
         for i in range(new_patch.shape[0]):
             for j in range(new_patch.shape[1]):
-                new_patch[i][j] = submatrix(patch[i][j])
+                new_patch[i][j] = submatrix(patch[0][j]) # modify here given the last batch of patch will not have 256 samples
 
         patch = new_patch
 
@@ -409,10 +421,10 @@ def test(
     patch_shape,
     netClassifier,
     test_loader,
-    image_size,
-    min_out,
-    max_out,
     target,
+    image_size,
+    min_out = 0,
+    max_out = 1,
     device="cuda",
     patch_type="square",
 ):
@@ -430,10 +442,10 @@ def test(
         total += 1
 
         # transform path
-        data_shape = data[0].data.cpu().numpy().shape
+        data_shape = data.data.cpu().numpy().shape
 
         if patch_type == "circle":
-            patch, mask, patch_shape = circle_transform(
+            patch, mask = circle_transform(
                 patch, data_shape, patch_shape, image_size
             )
         elif patch_type == "square":
@@ -443,11 +455,11 @@ def test(
 
         # patch, mask = Variable(patch), Variable(mask) - NOT SURE IF THIS SHOULD BE UNCOMMENTED
 
-        # extend mask to match dimensions of x
-        mask = mask.unsqueeze(0).expand(data.shape[0], -1, -1, -1)
+        # # extend mask to match dimensions of x
+        # mask = mask.unsqueeze(0).expand(data.shape[0], -1, -1, -1)
 
-        # extend patch to match dimensions of x
-        patch = patch.unsqueeze(0).expand(data.shape[0], -1, -1, -1)
+        # # extend patch to match dimensions of x
+        # patch = patch.unsqueeze(0).expand(data.shape[0], -1, -1, -1)
 
         adv_x = torch.mul((1 - mask), data) + torch.mul(mask, patch)
         adv_x = torch.clamp(adv_x, min_out, max_out)
@@ -461,9 +473,11 @@ def test(
         masked_patch = torch.mul(mask, patch)
         patch_copy = masked_patch.data.cpu().numpy()
         new_patch = np.zeros(patch_shape)
+
+
         for i in range(new_patch.shape[0]):
             for j in range(new_patch.shape[1]):
-                new_patch[i][j] = submatrix(patch_copy[i][j])
+                new_patch[i][j] = submatrix(patch[0][j])
 
         # patch = new_patch
 
