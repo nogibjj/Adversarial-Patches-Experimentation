@@ -36,7 +36,7 @@ def init_patch_circle(patch_size):
     - patch (numpy.ndarray): A 3-dimensional NumPy array representing the circular patch
                             with random values inside the circular boundary.
     """
-    radius = patch_size // 2
+    radius = patch_size // 2 
     patch = np.zeros((3, radius * 2, radius * 2))
     for i in range(3):
         a = np.zeros((radius * 2, radius * 2))
@@ -90,20 +90,20 @@ TENSOR_MEANS, TENSOR_STD = (
 
 def patch_forward(patch):
     """
-    Maps patch values from the range [-infinity, infinity] to ImageNet minimum and maximum values.
+    Maps patch values from the range [-infinity, infinity] to CIFAR-10 minimum and maximum values.
 
     Args:
     - patch (torch.Tensor): The input patch tensor.
 
     Returns:
-    - patch (torch.Tensor): The transformed patch tensor mapped to ImageNet minimum and maximum values.
+    - patch (torch.Tensor): The transformed patch tensor mapped to CIFAR-10 minimum and maximum values.
     """
     # Map patch values from [-infinity, infinity] to ImageNet min and max
     patch = (torch.tanh(patch) + 1 - 2 * TENSOR_MEANS) / (2 * TENSOR_STD)
     return patch
 
 
-def place_patch(img, patch):
+def place_patch(img, patch, apply_rotation = False):
     """
     Places the given patch randomly within the image channels.
 
@@ -114,6 +114,13 @@ def place_patch(img, patch):
     Returns:
     - img (numpy.ndarray): The modified image with the patch placed randomly within its channels.
     """
+
+    # apply rotation
+    if apply_rotation:    
+        rot = np.random.choice(4) # apply same rotation to all patches - elisa
+        rot = [0,90,180,270][rot] # should preserve the dimensions... - elisa
+        patch = torch.from_numpy(rotate(patch.detach().numpy(), rot, axes = (1,2), reshape=False))  # - shifted elisa. 
+
     for i in range(img.shape[0]):  # Loop through channels
         # Generate random offsets within the image boundaries for placing the patch
         h_offset = np.random.randint(0, img.shape[2] - patch.shape[1] - 1)
@@ -336,3 +343,106 @@ def patch_attack_untargeted(
     print(f"Epoch {epoch}, Attack Success Rate: {attack_success_rate.item()}.")
 
     return patch.data, attack_success_rate.item()
+
+def generate_patch(patch_size, patch_type, targeted, train_loader, val_loader, target_class = 1, device = 'cuda', num_epochs = 20):
+   
+    # load the Pre-Trained ResNet-20 model
+    resnet = ResNetCIFAR(num_layers=20, Nbits=None)
+    resnet = resnet.to(device)
+    resnet.load_state_dict(torch.load("./pretrained_models/pretrained_model.pt"))
+
+    if targeted:
+        patch, results = patch_attack_targeted(resnet, device, train_loader, val_loader, target_class=target_class, patch_size=patch_size, patch_type=patch_type, num_epochs=num_epochs)
+    else:
+        patch, results = patch_attack_untargeted(resnet, device, train_loader, val_loader, patch_size=patch_size, patch_type=patch_type, num_epochs=num_epochs)
+    
+    return patch, results
+
+# plot the ASR as a function of the patch size
+
+def plot_asr(patches, results, val_loader, patch_size, target = None, device = 'cuda', attack_type = 'Targeted', shape = 'circle', model = None, model_name = None):
+    # Numbers of pairs of bars you want
+    # attack_type should equal to 'Targeted' or 'Untargeted'
+    N = 4
+
+    # Data on X-axis
+
+    # Specify the values of blue bars (height)
+
+    validation_ASR = []
+    training_ASR = []
+
+    for i in range(len(patches)):
+        # load the Pre-Trained ResNet-20 model
+        if model is None:
+            model = ResNetCIFAR(num_layers=20, Nbits=None)
+            model = model.to(device)
+            model.load_state_dict(torch.load("./pretrained_models/pretrained_model.pt"))
+        if attack_type == 'Targeted':
+            _, _, attack_success_rate = eval_patch_targeted(model, patches[i], val_loader, target_class = target, device = device)
+        else:
+            attack_success_rate = eval_patch_untargeted(model, patches[i], val_loader, device = device)
+        validation_ASR.append(attack_success_rate.item())
+        if attack_type == 'Targeted':
+            training_ASR.append(results[i]['attack_success_rate'])
+        else:
+            training_ASR.append(results[i])
+
+    # Position of bars on x-axis
+    ind = np.arange(N)
+
+    # Figure size
+    plt.figure(figsize=(10,6))
+
+    # Width of a bar 
+    width = 0.3       
+
+    # Plotting
+    plt.bar(ind, training_ASR , width, label='Training ASR')
+    plt.bar(ind + width, validation_ASR, width, label='Validation ASR')
+
+    # plot the baseline as a horizontal line
+    baseline_acc = baseline(model, val_loader, device)
+    plt.axhline(y=baseline_acc, color='r', linestyle='-', label = 'Baseline (No Patch) Incorr. Pred.')
+
+    # add value labels
+    for i in range(len(validation_ASR)):
+        plt.text(i - 0.1, training_ASR[i] + 0.02, str(round(training_ASR[i], 3)))
+        plt.text(i + 0.2, validation_ASR[i] + 0.02, str(round(validation_ASR[i], 3)))
+
+    plt.xlabel('Patch Size')
+    plt.ylabel('Attack Success Rate (ASR)')
+    plt.title(f'{attack_type} Attack Success Rate (ASR) as a function of Patch Size w/ {model_name}')
+
+    # xticks()
+    # First argument - A list of positions at which ticks should be placed
+    # Second argument -  A list of labels to place at the given locations
+    plt.xticks(ind + width / 2, patch_size)
+
+    # Finding the best position for legends and putting it
+    plt.legend(loc='best')
+    plt.savefig(f"../20_output_files/asr_{model_name}_{attack_type}_{target}.png")
+    plt.show()
+
+def baseline(net, testloader, device = 'cuda'):
+
+    criterion = nn.CrossEntropyLoss()
+
+    net.eval()
+    test_loss = 0
+    correct = 0
+    total = 0
+    with torch.no_grad():
+        for batch_idx, (inputs, targets) in enumerate(testloader):
+            inputs, targets = inputs.to(device), targets.to(device)
+            outputs = net(inputs)
+            loss = criterion(outputs, targets)
+
+            test_loss += loss.item()
+            _, predicted = outputs.max(1)
+            total += targets.size(0)
+            correct += predicted.eq(targets).sum().item()
+    num_val_steps = len(testloader)
+    val_acc = correct / total
+    print("Test Loss=%.4f, Test accuracy=%.4f" % (test_loss / (num_val_steps), val_acc))
+    return 1 - val_acc
