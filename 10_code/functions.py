@@ -371,6 +371,11 @@ def plot_asr(patches, results, val_loader, patch_size, target = None, device = '
 
     validation_ASR = []
     training_ASR = []
+    validation_resnet_ASR = []
+    three_bars = True
+
+    if model is None:
+        three_bars = False
 
     for i in range(len(patches)):
         # load the Pre-Trained ResNet-20 model
@@ -398,17 +403,36 @@ def plot_asr(patches, results, val_loader, patch_size, target = None, device = '
     width = 0.3       
 
     # Plotting
-    plt.bar(ind, training_ASR , width, label='Training ASR')
-    plt.bar(ind + width, validation_ASR, width, label='Validation ASR')
+    if three_bars:
+        for i in range(len(patches)):
+            resnet_model = ResNetCIFAR(num_layers=20, Nbits=None)
+            resnet_model = resnet_model.to(device)
+            resnet_model.load_state_dict(torch.load("./pretrained_models/pretrained_model.pt"))
+            if attack_type == 'Targeted':
+                _, _, attack_success_rate = eval_patch_targeted(resnet_model, patches[i], val_loader, target_class = target, device = device)
+            else:
+                attack_success_rate = eval_patch_untargeted(resnet_model, patches[i], val_loader, device = device)
+            validation_resnet_ASR.append(attack_success_rate.item())
+    
+    plt.bar(ind, training_ASR , width, label='Training ASR (ResNet20)')
+    plt.bar(ind + width, validation_ASR, width, label=f'Validation ASR ({model_name})')
+    if three_bars:
+        plt.bar(ind + 2*width, validation_resnet_ASR, width, label='Validation ASR (ResNet20)')
 
     # plot the baseline as a horizontal line
     baseline_acc = baseline(model, val_loader, device)
     plt.axhline(y=baseline_acc, color='r', linestyle='-', label = 'Baseline (No Patch) Incorr. Pred.')
 
     # add value labels
-    for i in range(len(validation_ASR)):
-        plt.text(i - 0.1, training_ASR[i] + 0.02, str(round(training_ASR[i], 3)))
-        plt.text(i + 0.2, validation_ASR[i] + 0.02, str(round(validation_ASR[i], 3)))
+    if not three_bars:
+        for i in range(len(validation_ASR)):
+            plt.text(i - 0.1, training_ASR[i] + 0.02, str(round(training_ASR[i], 3)))
+            plt.text(i + 0.2, validation_ASR[i] + 0.02, str(round(validation_ASR[i], 3)))
+    else:
+        for i in range(len(validation_ASR)):
+            plt.text(i - 0.1, training_ASR[i] + 0.02, str(round(training_ASR[i], 3)))
+            plt.text(i + 0.2, validation_ASR[i] + 0.02, str(round(validation_ASR[i], 3)))
+            plt.text(i + 0.5, validation_resnet_ASR[i] + 0.02, str(round(validation_resnet_ASR[i], 3)))
 
     plt.xlabel('Patch Size')
     plt.ylabel('Attack Success Rate (ASR)')
@@ -417,7 +441,7 @@ def plot_asr(patches, results, val_loader, patch_size, target = None, device = '
     # xticks()
     # First argument - A list of positions at which ticks should be placed
     # Second argument -  A list of labels to place at the given locations
-    plt.xticks(ind + width / 2, patch_size)
+    plt.xticks(ind + width, patch_size)
 
     # Finding the best position for legends and putting it
     plt.legend(loc='best')
