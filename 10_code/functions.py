@@ -131,7 +131,7 @@ def place_patch(img, patch):
 ## TARGETED ATTACK
 
 
-def eval_patch_targeted(model, patch, val_loader, target_class):
+def eval_patch_targeted(model, patch, val_loader, target_class, device):
     """
     Evaluates the performance of the given patch on the model using a validation loader.
 
@@ -174,7 +174,16 @@ def eval_patch_targeted(model, patch, val_loader, target_class):
     return acc, top5, attack_success_rate
 
 
-def patch_attack_targeted(model, target_class, patch_size, num_epochs=5):
+def patch_attack_targeted(
+    model,
+    device,
+    train_loader,
+    val_loader,
+    target_class,
+    patch_size,
+    patch_type,
+    num_epochs,
+):
     """
     Performs a targeted patch attack on the given model to deceive it into misclassifying target class images.
 
@@ -189,17 +198,18 @@ def patch_attack_targeted(model, target_class, patch_size, num_epochs=5):
     - metrics (dict): Dictionary containing evaluation metrics such as accuracy, top-5 accuracy, and attack success rate.
     """
 
-    train_set, val_set = torch.utils.data.random_split(trainset, [0.8, 0.2])
-    train_loader = torch.utils.data.DataLoader(
-        train_set, batch_size=batch_size, shuffle=True, drop_last=True, num_workers=4
-    )
-    val_loader = torch.utils.data.DataLoader(
-        val_set, batch_size=32, shuffle=False, drop_last=False, num_workers=4
-    )
+    if patch_type == "circle":
+        patch = nn.Parameter(
+            torch.tensor(init_patch_circle(patch_size)), requires_grad=True
+        )
+    elif patch_type == "square":
+        patch = nn.Parameter(
+            torch.tensor(init_patch_square(patch_size)), requires_grad=True
+        )
 
-    patch = nn.Parameter(
-        torch.tensor(init_patch_circle(patch_size)), requires_grad=True
-    )
+    # patch = nn.Parameter(
+    #     torch.tensor(init_patch_circle(patch_size)), requires_grad=True
+    # )
     optimizer = torch.optim.SGD([patch], lr=1e-1, momentum=0.8)
     loss_module = nn.CrossEntropyLoss()
 
@@ -220,13 +230,15 @@ def patch_attack_targeted(model, target_class, patch_size, num_epochs=5):
             t.set_description(f"Epoch {epoch}, Loss: {loss.item():4.2f}")
         if epoch % 5 == 0:
             acc, top5, attack_success_rate = eval_patch_targeted(
-                model, patch, val_loader, target_class
+                model, patch, val_loader, target_class, device
             )
             print(f"Epoch {epoch}, Attack Success Rate: {attack_success_rate.item()}.")
 
-    # Final validation
-    attack_success_rate = eval_patch_targeted(model, patch, val_loader)
-    print(f"Epoch {epoch}, Attack Success Rate: {attack_success_rate.item()}.")
+    # # Final validation
+    # attack_success_rate = eval_patch_targeted(
+    #     model, patch, val_loader, target_class, device
+    # )
+    # print(f"Epoch {epoch}, Attack Success Rate: {attack_success_rate.item()}.")
 
     return patch.data, {
         "acc": acc.item(),
@@ -238,7 +250,7 @@ def patch_attack_targeted(model, target_class, patch_size, num_epochs=5):
 ## UNTARGETED ATTACK
 
 
-def eval_patch_untargeted(model, patch, val_loader):
+def eval_patch_untargeted(model, patch, val_loader, device):
     """
     Evaluates the effectiveness of an untargeted patch attack on the model using a validation loader.
 
@@ -269,7 +281,9 @@ def eval_patch_untargeted(model, patch, val_loader):
     return attack_success_rate
 
 
-def patch_attack_untargeted(model, patch_size=16, num_epochs=5):
+def patch_attack_untargeted(
+    model, device, train_loader, val_loader, patch_size, patch_type, num_epochs
+):
     """
     Performs an untargeted patch attack on the given model to induce misclassification on non-targeted images.
 
@@ -283,17 +297,18 @@ def patch_attack_untargeted(model, patch_size=16, num_epochs=5):
     - attack_success_rate (float): The final attack success rate of the patch on non-target class images.
     """
 
-    train_set, val_set = torch.utils.data.random_split(trainset, [0.8, 0.2])
-    train_loader = torch.utils.data.DataLoader(
-        train_set, batch_size=batch_size, shuffle=True, drop_last=True, num_workers=4
-    )
-    val_loader = torch.utils.data.DataLoader(
-        val_set, batch_size=32, shuffle=False, drop_last=False, num_workers=4
-    )
+    if patch_type == "circle":
+        patch = nn.Parameter(
+            torch.tensor(init_patch_circle(patch_size)), requires_grad=True
+        )
+    elif patch_type == "square":
+        patch = nn.Parameter(
+            torch.tensor(init_patch_square(patch_size)), requires_grad=True
+        )
 
-    patch = nn.Parameter(
-        torch.tensor(init_patch_circle(patch_size)), requires_grad=True
-    )
+    # patch = nn.Parameter(
+    #     torch.tensor(init_patch_circle(patch_size)), requires_grad=True
+    # )
     optimizer = torch.optim.SGD([patch], lr=1e-1, momentum=0.8)
     loss_module = nn.CrossEntropyLoss()
 
@@ -311,11 +326,13 @@ def patch_attack_untargeted(model, patch_size=16, num_epochs=5):
             optimizer.step()
             t.set_description(f"Epoch {epoch}, Loss: {loss.item():4.2f}")
         if epoch % 5 == 0:
-            attack_success_rate = eval_patch_untargeted(model, patch, val_loader)
+            attack_success_rate = eval_patch_untargeted(
+                model, patch, val_loader, device
+            )
             print(f"Epoch {epoch}, Attack Success Rate: {attack_success_rate.item()}.")
 
     # Final validation
-    attack_success_rate = eval_patch_untargeted(model, patch, val_loader)
+    attack_success_rate = eval_patch_untargeted(model, patch, val_loader, device)
     print(f"Epoch {epoch}, Attack Success Rate: {attack_success_rate.item()}.")
 
     return patch.data, attack_success_rate.item()
