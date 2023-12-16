@@ -29,6 +29,9 @@ MANIFEST
 # CIFAR-10 Data
 00_data/*.gz
 
+# pre-trained models (VGG)
+10_code/pretrained_models/*.pt
+
 # PyInstaller
 #  Usually these files are written by a python script from a template
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.

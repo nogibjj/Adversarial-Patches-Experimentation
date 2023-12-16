@@ -11,6 +11,7 @@ import math
 import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
+import json
 
 import torch.nn as nn
 import torch.nn.init as init
@@ -373,6 +374,7 @@ def plot_asr(patches, results, val_loader, patch_size, target = None, device = '
     training_ASR = []
     validation_resnet_ASR = []
     three_bars = True
+    classes = ('Plane', 'Car', 'Bird', 'Cat', 'Deer', 'Dog', 'Frog', 'Horse', 'Ship', 'Truck')
 
     if model is None:
         three_bars = False
@@ -436,7 +438,10 @@ def plot_asr(patches, results, val_loader, patch_size, target = None, device = '
 
     plt.xlabel('Patch Size')
     plt.ylabel('Attack Success Rate (ASR)')
-    plt.title(f'{attack_type} Attack Success Rate (ASR) as a function of Patch Size w/ {model_name}')
+    if target is None:
+        plt.title(f'{attack_type} Attack Success Rate (ASR) As A Function of Patch Size w/ {model_name}')
+    else:
+        plt.title(f'{attack_type} Attack Success Rate (ASR) For Class {classes[target]} As A Function of Patch Size w/ {model_name}')
 
     # xticks()
     # First argument - A list of positions at which ticks should be placed
@@ -470,3 +475,13 @@ def baseline(net, testloader, device = 'cuda'):
     val_acc = correct / total
     print("Test Loss=%.4f, Test accuracy=%.4f" % (test_loss / (num_val_steps), val_acc))
     return 1 - val_acc
+
+def write_to_json(patch, results, patch_size, attack_type, target = None, path = '../20_output_files/model_results/'):
+    patch_copy = patch.detach().numpy().tolist()
+    if target is None:
+        filename = f'{attack_type}_{patch_size}.json'
+    else:
+        filename = f'{attack_type}_{patch_size}_{target}.json'
+
+    with open(path + filename, 'w') as outfile:
+        json.dump({'patch': patch_copy, 'results': results}, outfile)
