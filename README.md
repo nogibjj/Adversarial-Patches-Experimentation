@@ -13,9 +13,8 @@ Our overall approach is to train both targeted and untargeted adversarial patche
 Initialize a patch that that can be applied to any random locations on the image. 
 Update the patch:
 
-Untargeted Approach: the patch is updated through stochastic gradient descent.
-
-Targeted Approach: labels of all images are assigned to the target class and the patch is updated through stochastic gradient ascent. The objective function takes the following form:
+- Untargeted Approach: the patch is updated through stochastic gradient descent.
+- Targeted Approach: labels of all images are assigned to the target class and the patch is updated through stochastic gradient ascent. The objective function takes the following form:
 
 ## Results
 
@@ -24,5 +23,6 @@ We found larger patches relative to input size exhibited higher success rates in
 ## Conclusion
 In this study, we utilized the CIFAR-10 dataset to train adversarial patches, aiming to examine both the impact of various patch types and the degree to which these trained patches could transfer across different Deep Neural Network architectures. Our experimentations with untargeted and targeted attacks were able to surpass baseline error rates highlighting their efficacy. Generally, we observed a positive correlation between patch size and attack success rate demonstrating that larger patches relative to the size of the input image have a better ability to deceive the neural network. Evaluations across DenseNet-121 and VGG-16 showcased notable transferability of adversarial patches for untargeted attacks. However, we observed relatively inferior transferability properties with targeted attacks using ‘Bird’ patch and ‘Horse’ patch as examples emphasizing nuanced challenges with targeted attacks in carrying over adversarial patterns to alternative architectures.
 
+![image](https://github.com/nogibjj/Adversarial-Patches-Experimentation/assets/111402572/b3cfa71d-ff97-4a51-a024-6e0313f38be1)
 
 
