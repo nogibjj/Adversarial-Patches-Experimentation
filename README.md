@@ -13,8 +13,8 @@ Our overall approach is to train both targeted and untargeted adversarial patche
 Initialize a patch that that can be applied to any random locations on the image. 
 Update the patch:
 
-- Untargeted Approach: the patch is updated through stochastic gradient descent.
-- Targeted Approach: labels of all images are assigned to the target class and the patch is updated through stochastic gradient ascent. The objective function takes the following form:
+- Untargeted Approach: the patch is updated through stochastic gradient ascent.
+- Targeted Approach: labels of all images are assigned to the target class and the patch is updated through stochastic gradient descent. The objective function takes the following form:
 
 ## Results
 
